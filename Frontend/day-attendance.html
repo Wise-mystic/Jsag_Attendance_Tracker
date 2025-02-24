@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Day Attendance Tracking</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="css/responsive.css">
+    <style>
+        .attendance-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .day-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .day-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .attendance-stats {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .stat-badge {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            color: white;
+        }
+
+        .present { background-color: #22c55e; }
+        .absent { background-color: #ef4444; }
+        .total { background-color: #3b82f6; }
+
+        .member-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .member-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .date-selector {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        @media (max-width: 768px) {
+            .attendance-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="date-selector">
+            <label for="attendance-date">Select Date:</label>
+            <input type="date" id="attendance-date" onchange="loadDayAttendance()">
+        </div>
+
+        <div class="attendance-grid" id="dayAttendanceGrid"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5000';
+
+        async function loadDayAttendance() {
+            const date = document.getElementById('attendance-date').value;
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/attendance/by-day?date=${date}`);
+            const data = await response.json();
+            renderDayCards(data);
+        }
+
+        function renderDayCards(data) {
+            const grid = document.getElementById('dayAttendanceGrid');
+            grid.innerHTML = '';
+
+            Object.entries(data).forEach(([day, dayData]) => {
+                const card = createDayCard(day, dayData);
+                grid.appendChild(card);
+            });
+        }
+
+        function createDayCard(day, data) {
+            const div = document.createElement('div');
+            div.className = 'day-card';
+            
+            const presentCount = data.members.filter(m => m.present).length;
+            const totalCount = data.members.length;
+            
+            div.innerHTML = `
+                <div class="day-header">
+                    <h2>${day}</h2>
+                    <div class="attendance-stats">
+                        <span class="stat-badge present">Present: ${presentCount}</span>
+                        <span class="stat-badge absent">Absent: ${totalCount - presentCount}</span>
+                        <span class="stat-badge total">Total: ${totalCount}</span>
+                    </div>
+                </div>
+                <div class="member-list">
+                    ${data.members.map(member => `
+                        <div class="member-item">
+                            <span>${member.name}</span>
+                            <div class="attendance-controls">
+                                <button 
+                                    class="btn present"
+                                    onclick="markAttendance('${member.id}', true)"
+                                    ${member.present ? 'disabled' : ''}>
+                                    Present
+                                </button>
+                                <button 
+                                    class="btn absent"
+                                    onclick="markAttendance('${member.id}', false)"
+                                    ${!member.present ? 'disabled' : ''}>
+                                    Absent
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            return div;
+        }
+
+        async function markAttendance(memberId, present) {
+            try {
+                const date = document.getElementById('attendance-date').value;
+                const response = await fetchWithAuth(`${API_BASE_URL}/api/attendance/${memberId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ present, date })
+                });
+
+                if (!response.ok) throw new Error('Failed to mark attendance');
+                
+                await loadDayAttendance();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to mark attendance');
+            }
+        }
+
+        // Set today's date as default and load attendance
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('attendance-date').value = today;
+            loadDayAttendance();
+        });
+    </script>
+</body>
+</html>
